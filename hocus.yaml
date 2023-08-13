@@ -1,0 +1,75 @@
+# TODO: Auto publish this in https://www.schemastore.org/json/
+# If changed then to regenerate:
+# npx ts-node entrypoints/utils/generate-hocus-yml-json-schema.ts > hocus.yml.schema.json
+# yaml-language-server: $schema=hocus.yml.schema.json
+image:
+  file: hocus.Dockerfile
+  buildContext: ./
+tasks:
+  - name: Control Plane
+    prebuild: |
+      yarn install
+      npm run dev-prebuild
+      ops/bin/prepare.sh
+    workspaceShell: fish
+    workspace: |
+      npx ts-node -r tsconfig-paths/register entrypoints/utils/generate-hocus-yml-json-schema.ts > hocus.yml.schema.json
+      ops/bin/up.sh
+      ops/bin/temporal-up.sh
+      npm run dev
+  - name: Agent
+    prebuild: |
+      sleep 0.01
+    # we are setting up agent-dependencies in the workspace because they take up
+    # too much space to fit in the prebuild image. should be moved to prebuild
+    # once we make prebuild image size configurable
+    workspaceShell: fish
+    workspace: |
+      sudo ops/bin/dev/setup-agent-dependencies.sh
+      ops/bin/dev/run-worker.sh
+  - name: Temporal codec server
+    prebuild: |
+      sleep 0.01
+    workspaceShell: fish
+    workspace: |
+      PORT=1337 npx ts-node -r tsconfig-paths/register entrypoints/codec-server.ts
+  - name: Test state manager
+    prebuild: |
+      sleep 0.01
+    workspaceShell: fish
+    workspace: |
+      sudo mkdir -p /home/hocus/dev/hocus-resources/tests
+      sudo rm -f /home/hocus/dev/hocus-resources/tests/state_manager.sock
+      sudo TEST_STORAGE_DIR=/home/hocus/dev/hocus-resources/tests yarn run test:startTestManager
+  - name: Zot
+    prebuild: |
+      sleep 0.01
+    workspaceShell: fish
+    workspace: |
+      zot serve ops/docker/zot/config-workspace.json
+  - name: Terminal
+    prebuild: sleep 0.01
+    workspaceShell: fish
+    workspace: sleep 0.01
+vscode:
+  extensions:
+    - Prisma.prisma
+    - esbenp.prettier-vscode
+    - dbaeumer.vscode-eslint
+    - eamodio.gitlens
+    - GitHub.copilot
+    - firsttris.vscode-jest-runner
+    - dcortes92.FreeMarker
+    - AntonLilleby.xp-freemarker-formatter
+    - emeraldwalk.RunOnSave
+    - pomdtr.excalidraw-editor
+    - bierner.markdown-mermaid
+    - ms-azuretools.vscode-docker
+    # Code spell checking
+    - streetsidesoftware.code-spell-checker
+    # Dockerfile linter
+    - exiasr.hadolint
+    # Shell script linter
+    - timonwong.shellcheck
+    - valentjn.vscode-ltex
+    - GitHub.vscode-pull-request-github
